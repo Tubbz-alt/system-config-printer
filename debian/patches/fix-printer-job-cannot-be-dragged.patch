@@ -2,6 +2,18 @@ Index: system-config-printer-1.5.11/jobviewer.py
 ===================================================================
 --- system-config-printer-1.5.11.orig/jobviewer.py
 +++ system-config-printer-1.5.11/jobviewer.py
+@@ -439,9 +439,9 @@ class JobViewer (GtkGUI):
+                 ("cancel-job", Gtk.STOCK_CANCEL, _("_Cancel"), None,
+                  _("Cancel selected jobs"), self.on_job_cancel_activate),
+                 ("up-job", Gtk.STOCK_GO_UP, _("_Up"), None,
+-                 _("Edit selected jobs"), self.on_job_up_activate),
++                 _("Move up selected jobs"), self.on_job_up_activate),
+                 ("down-job", Gtk.STOCK_GO_DOWN, _("_Down"), None,
+-                 _("Edit selected jobs"), self.on_job_down_activate),
++                 _("Move down selected jobs"), self.on_job_down_activate),
+                 ("delete-job", Gtk.STOCK_DELETE, _("_Delete"), None,
+                  _("Delete selected jobs"), self.on_job_delete_activate),
+                 ("hold-job", Gtk.STOCK_MEDIA_PAUSE, _("_Hold"), None,
 @@ -574,6 +574,21 @@ class JobViewer (GtkGUI):
                                 self.on_treeview_button_release_event)
          self.treeview.connect ('popup-menu', self.on_treeview_popup_menu)
