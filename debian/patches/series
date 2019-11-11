@@ -6,3 +6,4 @@
 0006-Set-programe-name-for-scp-dbus-service-as-well.patch
 define-classes-for-Secret-only-when-libsecret-is-installe.patch
 fix-printer-job-cannot-be-moved.patch
+fix-printer-job-cannot-be-dragged.patch

@@ -1,0 +1,278 @@
+Index: system-config-printer-1.5.11/jobviewer.py
+===================================================================
+--- system-config-printer-1.5.11.orig/jobviewer.py
++++ system-config-printer-1.5.11/jobviewer.py
+@@ -574,6 +574,21 @@ class JobViewer (GtkGUI):
+                                self.on_treeview_button_release_event)
+         self.treeview.connect ('popup-menu', self.on_treeview_popup_menu)
+ 
++        # DnD events
++        self.treeview.connect("drag-data-received", self.on_treeview_drag_data_received)
++        #self.treeview.connect("drag-data-get", self.on_treeview_drag_data_get)
++        #self.treeview.connect("drag-begin", self.on_treeview_drag_begin)
++
++        target_entry = Gtk.TargetEntry.new('text/plain', 2, 0)
++        self.treeview.enable_model_drag_source(
++                Gdk.ModifierType.BUTTON1_MASK,[target_entry],
++                Gdk.DragAction.DEFAULT|Gdk.DragAction.MOVE
++        )
++        self.treeview.enable_model_drag_dest(
++                [target_entry],
++                Gdk.DragAction.DEFAULT|Gdk.DragAction.MOVE
++        )
++
+         self.JobsWindow.set_icon_name (ICON)
+         self.JobsWindow.hide ()
+ 
+@@ -900,11 +915,6 @@ class JobViewer (GtkGUI):
+         store = self.store
+         iter = self.store.append (None)
+         store.set_value (iter, 0, job)
+-        value0 = self.treeview.get_model().get_value(iter, 0)
+-        value1 = self.treeview.get_model().get_value(iter, 1)
+-        #value2 = self.treeview.get_model().get_value(iter, 2)
+-        #value3 = self.treeview.get_model().get_value(iter, 3)
+-        #value4 = self.treeview.get_model().get_value(iter, 4)
+         debugprint ("Job %d added" % job)
+         self.jobiters[job] = iter
+                
+@@ -1293,6 +1303,39 @@ class JobViewer (GtkGUI):
+         event = Gdk.Event (Gdk.EventType.NOTHING)
+         self.show_treeview_popup_menu (treeview, event, 0)
+ 
++    def on_treeview_drag_data_received(self, treeview, drag_context, x, y, data, info, time):
++        try:
++            dest_path, drop_pos = self.treeview.get_dest_row_at_pos(x, y)
++        except TypeError as e:
++            debugprint(e)
++            return
++        iter = self.store.get_iter(dest_path)
++        des_job = self.store.get_value(iter, 0)
++        try:
++            c = authconn.Connection(self.JobsWindow,
++                                    host=self.host,
++                                    port=self.port,
++                                    encryption=self.encryption)
++        except cups.IPPError as e:
++            (e, m) = e.args
++            self.show_IPP_Error(e, m)
++            self.update_monitor()
++            return
++        except RuntimeError:
++            return
++
++        jobs_attrs = self._get_active_jobs_attrs(c)
++        sorted_jobs_attrs = self._jobs_attrs_sort_by_priority(jobs_attrs)
++        for jobid in self.jobids:
++            self._job_move(jobid, des_job, sorted_jobs_attrs, c)
++    '''
++    def on_treeview_drag_data_get(self, treeview, drag_context, data, info, time):
++        print("@@@Enter into data_data_get!")
++
++    def on_treeview_drag_begin(self, widget, drag_context):
++        print("@@@Entdder into data_begin!")
++    '''
++
+     def on_treeview_button_release_event(self, treeview, event):
+         if event.button == 3:
+             self.show_treeview_popup_menu (treeview, event, event.button)
+@@ -1475,6 +1518,93 @@ class JobViewer (GtkGUI):
+                 sorted_jobs_attrs.append(attrs)
+         return sorted_jobs_attrs
+ 
++    def _job_move(self, src_job, des_job, sorted_jobs_attrs, connection):
++        if ( src_job == des_job ):
++            return
++        length = len(sorted_jobs_attrs)
++        if ( length < 1 ):
++            return
++
++        src_idx = length
++        for idx in range(0, length):
++            if src_job == sorted_jobs_attrs[idx]['job-id']:
++                src_idx = idx
++                break
++
++        des_idx = length
++        for idx in range(0, length):
++            if des_job == sorted_jobs_attrs[idx]['job-id']:
++                des_idx = idx
++                break
++
++        if (( src_idx == length ) or ( des_idx == length )):
++            return
++
++        sorted_jobs_attrs[src_idx]['job-priority'] = sorted_jobs_attrs[des_idx]['job-priority']
++        #adjust
++        if src_idx > des_idx:
++            #down
++            if ( self._job_priority_compare(sorted_jobs_attrs[src_idx],
++                                            sorted_jobs_attrs[des_idx]) >= 0 ):
++                if ( des_idx > 0):
++                    while(self._job_priority_compare(sorted_jobs_attrs[src_idx],
++                                                     sorted_jobs_attrs[des_idx - 1]) >= 0):
++                        for i in range(des_idx, length):
++                            sorted_jobs_attrs[i]['job-priority'] += 1
++                            if sorted_jobs_attrs[i]['job-priority'] > 100:
++                                debugprint("Can't continue to adjust job priority")
++                                return
++            else:
++                while (self._job_priority_compare(sorted_jobs_attrs[src_idx],
++                                                  sorted_jobs_attrs[des_idx]) <= 0):
++                    for i in range(des_idx, length):
++                        if ( i == src_idx ):
++                            continue
++                        sorted_jobs_attrs[i]['job-priority'] += 1
++                        if sorted_jobs_attrs[i]['job-priority'] > 100:
++                            debugprint("Can't continue to adjust job priority")
++                            return
++        elif src_idx < des_idx:
++            #up
++            if (self._job_priority_compare(sorted_jobs_attrs[src_idx],
++                                           sorted_jobs_attrs[des_idx]) >= 0):
++                sorted_jobs_attrs[src_idx]['job-priority'] += 1
++
++            if ( (des_idx + 1) < length ):
++                while (self._job_priority_compare(sorted_jobs_attrs[src_idx],
++                                                  sorted_jobs_attrs[des_idx + 1]) <= 0):
++                    for i in range(des_idx + 1, length):
++                        sorted_jobs_attrs[i]['job-priority'] += 1
++                        if sorted_jobs_attrs[i]['job-priority'] > 100:
++                            debugprint("Can't continue to adjust job priority")
++                            return
++
++        for attrs in sorted_jobs_attrs:
++            connection.setJobPriority(attrs['job-id'], attrs['job-priority'])
++        del connection
++
++        self.monitor.refresh()
++        if self.my_monitor:
++            self.my_monitor.refresh()
++        self.update_job_creation_times()
++
++    def _get_job_idx_by_id(self, job, sorted_jobs_attrs):
++        length = len(sorted_jobs_attrs)
++        if (length < 1):
++            return
++        idx = -1
++        for idx in range(0, length):
++            if job == sorted_jobs_attrs[idx]['job-id']:
++                src_idx = idx
++                break
++        return idx
++
++    def _get_job_id_by_idx(self, idx, sorted_jobs_attrs):
++        length = len(sorted_jobs_attrs)
++        if ((length < 1) or (idx >= length)):
++            return
++        return sorted_jobs_attrs[idx]['job-id']
++
+ 
+     def on_job_up_activate(self, menuitem):
+         try:
+@@ -1492,43 +1622,13 @@ class JobViewer (GtkGUI):
+         jobs_attrs = self._get_active_jobs_attrs(c)
+ 
+         sorted_jobs_attrs = self._jobs_attrs_sort_by_priority(jobs_attrs)
+-
++        length = len(sorted_jobs_attrs)
+         for jobid in self.jobids:
+-            i = 0
+-            for attrs in sorted_jobs_attrs:
+-
+-                if jobid == attrs['job-id']:
+-                    current_attrs = attrs
+-                    break
+-                i += 1
+-
+-            if i >= len(sorted_jobs_attrs):
+-                debugprint("Tis job is not found in active job list")
+-            elif i == len(sorted_jobs_attrs) - 1:
+-                debugprint("Tis job is already the highest priority job")
+-            else:
+-                current_attrs['job-priority'] = sorted_jobs_attrs[i+1]['job-priority']
+-                if( self._job_priority_compare(current_attrs, sorted_jobs_attrs[i+1]) >= 0 ):
+-                    current_attrs['job-priority'] += 1
+-                if (( i + 2) < len(sorted_jobs_attrs)) and \
+-                        (self._job_priority_compare(current_attrs, sorted_jobs_attrs[i + 2]) < 0):
+-                    for j in range(i + 2, len(sorted_jobs_attrs)):
+-                        sorted_jobs_attrs[j]['job-priority'] += 1
+-                        if sorted_jobs_attrs[j]['job-priority'] > 100:
+-                            debugprint("Can't continue to adjust job priority")
+-                            return
+-            for attrs in sorted_jobs_attrs:
+-                if jobid == attrs['job-id']:
+-                    c.setJobPriority(jobid, current_attrs['job-priority'])
+-                else:
+-                    c.setJobPriority(attrs['job-id'], attrs['job-priority'])
+-
+-        del c
+-        self.monitor.refresh()
+-        if self.my_monitor:
+-            self.my_monitor.refresh()
+-        self.update_job_creation_times()
+-
++            src_idx = self._get_job_idx_by_id(jobid, sorted_jobs_attrs)
++            if ( ( src_idx == -1 ) or ( ( src_idx + 1) >= length ) ):
++                continue
++            des_job = self._get_job_id_by_idx(src_idx + 1, sorted_jobs_attrs)
++            self._job_move(jobid, des_job, sorted_jobs_attrs, c)
+ 
+     def on_job_down_activate(self, menuitem):
+         try:
+@@ -1546,49 +1646,13 @@ class JobViewer (GtkGUI):
+ 
+         jobs_attrs = self._get_active_jobs_attrs(c)
+         sorted_jobs_attrs = self._jobs_attrs_sort_by_priority(jobs_attrs)
+-
++        length = len(sorted_jobs_attrs)
+         for jobid in self.jobids:
+-            i = 0
+-            for attrs in sorted_jobs_attrs:
+-
+-                if jobid == attrs['job-id']:
+-                    current_attrs = attrs
+-                    break
+-                i += 1
+-
+-            if i >= len(sorted_jobs_attrs):
+-                debugprint("Tis job is not found in active job list")
+-            elif i == 0:
+-                debugprint("Tis job is already the lowest priority job")
+-            else:
+-                temp = current_attrs['job-priority']
+-                current_attrs['job-priority'] = sorted_jobs_attrs[i - 1]['job-priority']
+-                sorted_jobs_attrs[i - 1]['job-priority'] = temp
+-                if ( i > 1 ) and (self._job_priority_compare(
+-                        current_attrs, sorted_jobs_attrs[i - 2]) > 0):
+-                    current_attrs['job-priority'] += 1
+-
+-                while (self._job_priority_compare(current_attrs, sorted_jobs_attrs[i - 1]) <= 0):
+-                    sorted_jobs_attrs[i - 1]['job-priority'] += 1
+-
+-                if ((i + 1) < len(sorted_jobs_attrs)):
+-                    while ( self._job_priority_compare(sorted_jobs_attrs[i - 1], sorted_jobs_attrs[i + 1]) <= 0 ):
+-                        for j in range(i + 1, len(sorted_jobs_attrs)):
+-                            sorted_jobs_attrs[j]['job-priority'] += 1
+-                            if sorted_jobs_attrs[j]['job-priority'] > 100:
+-                                debugprint("Can't continue to adjust job priority")
+-                                return
+-            for attrs in sorted_jobs_attrs:
+-                if jobid == attrs['job-id']:
+-                    c.setJobPriority(jobid, current_attrs['job-priority'])
+-                else:
+-                    c.setJobPriority(attrs['job-id'], attrs['job-priority'])
+-
+-        del c
+-        self.monitor.refresh()
+-        if self.my_monitor:
+-            self.my_monitor.refresh()
+-        self.update_job_creation_times()
++            src_idx = self._get_job_idx_by_id(jobid, sorted_jobs_attrs)
++            if ( src_idx <= 0 ):
++                continue
++            des_job = self._get_job_id_by_idx(src_idx - 1, sorted_jobs_attrs)
++            self._job_move(jobid, des_job, sorted_jobs_attrs, c)
+ 
+ 
+     def on_job_delete_activate(self, menuitem):
