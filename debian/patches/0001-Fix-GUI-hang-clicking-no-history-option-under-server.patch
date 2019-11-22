@@ -1,0 +1,58 @@
+From 24bf350b564a888ad97deea95ece1f976d10cee5 Mon Sep 17 00:00:00 2001
+From: Hualet Wang <mr.asianwang@gmail.com>
+Date: Fri, 22 Nov 2019 20:55:09 +0800
+Subject: [PATCH] Fix GUI hang clicking "no history" option under server
+ advanced settings
+
+---
+ cupspk.py | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/cupspk.py b/cupspk.py
+index c9aab03..719cd7e 100644
+--- a/cupspk.py
++++ b/cupspk.py
+@@ -141,7 +141,7 @@ class Connection:
+ 
+         # The PolicyKit call did not work (either a PK-error and we got a dbus
+         # exception that wasn't handled, or an error in the mechanism itself)
+-        if pk_retval != '':
++        if len(pk_retval):
+             debugprint ('PolicyKit call to %s did not work: %s' %
+                         (pk_function_name, repr (pk_retval)))
+             return fallback_function(*args, **kwds)
+@@ -401,13 +401,13 @@ class Connection:
+             if fd is not None:
+                 os.lseek (fd, 0, os.SEEK_SET)
+                 line = tmpfile.readline()
+-                while line != '':
++                while len(line):
+                     os.write (fd, line.encode('UTF-8'))
+                     line = tmpfile.readline()
+             else:
+                 file_object.seek (0)
+                 line = tmpfile.readline()
+-                while line != '':
++                while len(line):
+                     file_object.write (line.encode('UTF-8'))
+                     line = tmpfile.readline()
+ 
+@@ -446,13 +446,13 @@ class Connection:
+             if fd is not None:
+                 os.lseek (fd, 0, os.SEEK_SET)
+                 buf = os.read (fd, 512)
+-                while buf != '':
++                while len(buf):
+                     os.write (tmpfd, buf)
+                     buf = os.read (fd, 512)
+             else:
+                 file_object.seek (0)
+                 line = file_object.readline ()
+-                while line != '':
++                while len(line):
+                     os.write (tmpfd, line)
+                     line = file_object.readline ()
+ 
+-- 
+2.20.1
+
