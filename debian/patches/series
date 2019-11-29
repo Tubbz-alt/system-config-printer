@@ -8,3 +8,4 @@ define-classes-for-Secret-only-when-libsecret-is-installe.patch
 fix-printer-job-cannot-be-moved.patch
 fix-printer-job-cannot-be-dragged.patch
 0001-Fix-GUI-hang-clicking-no-history-option-under-server.patch
+fix-troubleshoot-module-translation-bug.patch

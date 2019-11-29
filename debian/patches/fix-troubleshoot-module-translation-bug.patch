@@ -1,0 +1,38 @@
+Index: system-config-printer/troubleshoot/base.py
+===================================================================
+--- system-config-printer.orig/troubleshoot/base.py
++++ system-config-printer/troubleshoot/base.py
+@@ -21,12 +21,13 @@
+ ## Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ 
+ from gi.repository import Gtk
+-from gettext import gettext as _
++import sys
++sys.path.append("..")
++import config
+ N_ = lambda x: x
+ from debug import *
+-
+-__all__ = [ '_',
+-            'debugprint', 'get_debugging', 'set_debugging',
++import gettext
++__all__ = [ 'debugprint', 'get_debugging', 'set_debugging',
+             'Question',
+             'Multichoice',
+             'TEXT_start_print_admin_tool' ]
+@@ -38,6 +39,7 @@ TEXT_start_print_admin_tool = N_("To sta
+ class Question:
+     def __init__ (self, troubleshooter, name=None):
+         self.troubleshooter = troubleshooter
++
+         if name:
+             self.__str__ = lambda: name
+ 
+@@ -81,6 +83,7 @@ class Question:
+ class Multichoice(Question):
+     def __init__ (self, troubleshooter, question_tag, question_title,
+                   question_text, choices, name=None):
++        gettext.install(domain=config.PACKAGE, localedir=config.localedir)
+         Question.__init__ (self, troubleshooter, name)
+         page = self.initial_vbox (question_title, question_text)
+         choice_vbox = Gtk.VBox ()
